@@ -67,9 +67,16 @@ export const getWeather = async (key, city) => {
   return await res.json();
 };
 
-// 获取教书先生天气 API
-// https://api.oioweb.cn/doc/weather/GetWeather
-export const getOtherWeather = async () => {
-  const res = await fetch("https://api.oioweb.cn/api/weather/GetWeather");
+// 免 Key 备用方案：IP 定位（ipinfo.io，返回城市名与经纬度）
+export const getIpLocation = async () => {
+  const res = await fetch("https://ipinfo.io/json");
+  return await res.json();
+};
+
+// 免 Key 备用方案：Open-Meteo 实时天气（loc 为 "lat,lon"）
+export const getOpenMeteoWeather = async (lat, lon) => {
+  const res = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`,
+  );
   return await res.json();
 };

@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-import { getAdcode, getWeather, getOtherWeather } from "@/api";
+import { getAdcode, getWeather, getIpLocation, getOpenMeteoWeather } from "@/api";
 import { Error } from "@icon-park/vue-next";
 
 // 高德开发者 Key
@@ -38,16 +38,38 @@ const weatherData = reactive({
   },
 });
 
-// 取出天气平均值
-const getTemperature = (min, max) => {
-  try {
-    // 计算平均值并四舍五入
-    const average = (Number(min) + Number(max)) / 2;
-    return Math.round(average);
-  } catch (error) {
-    console.error("计算温度出现错误：", error);
-    return "NaN";
+// WMO 天气代码 → 中文描述
+const wmoText = (code) => {
+  const map = {
+    0: "晴", 1: "大致晴朗", 2: "局部多云", 3: "阴",
+    45: "雾", 48: "雾凇",
+    51: "毛毛雨", 53: "毛毛雨", 55: "毛毛雨",
+    56: "冻毛毛雨", 57: "冻毛毛雨",
+    61: "小雨", 63: "中雨", 65: "大雨",
+    66: "冻雨", 67: "冻雨",
+    71: "小雪", 73: "中雪", 75: "大雪", 77: "雪粒",
+    80: "阵雨", 81: "阵雨", 82: "强阵雨",
+    85: "阵雪", 86: "阵雪",
+    95: "雷阵雨", 96: "雷阵雨伴冰雹", 99: "雷阵雨伴冰雹",
+  };
+  return map[code] ?? "未知";
+};
+
+// 风向（度数）→ 中文
+const windDirText = (deg) => {
+  const dirs = ["北风", "东北风", "东风", "东南风", "南风", "西南风", "西风", "西北风"];
+  return dirs[Math.round((deg % 360) / 45) % 8];
+};
+
+// 风速(km/h) → 风力等级(蒲福风级)
+const beaufort = (kmh) => {
+  const thresholds = [1, 5, 11, 19, 28, 38, 49, 61, 74, 88, 102, 117];
+  let level = 0;
+  for (const t of thresholds) {
+    if (kmh > t) level++;
+    else break;
   }
+  return level;
 };
 
 // 获取天气数据
@@ -55,19 +77,21 @@ const getWeatherData = async () => {
   try {
     // 获取地理位置信息
     if (!mainKey) {
-      console.log("未配置，使用备用天气接口");
-      const result = await getOtherWeather();
-      console.log(result);
-      const data = result.result;
+      // 未配置高德 Key，使用免 Key 备用天气接口
+      console.log("未配置高德 Key，使用免 Key 备用天气接口（Open-Meteo）");
+      const loc = await getIpLocation();
+      if (!loc || !loc.loc) throw "定位失败";
+      const [lat, lon] = loc.loc.split(",").map(Number);
+      const w = await getOpenMeteoWeather(lat, lon);
+      const cw = w.current_weather;
       weatherData.adCode = {
-        city: data.city.City || "未知地区",
-        // adcode: data.city.cityId,
+        city: loc.city || loc.region || "未知地区",
       };
       weatherData.weather = {
-        weather: data.condition.day_weather,
-        temperature: getTemperature(data.condition.min_degree, data.condition.max_degree),
-        winddirection: data.condition.day_wind_direction,
-        windpower: data.condition.day_wind_power,
+        weather: wmoText(cw.weathercode),
+        temperature: Math.round(cw.temperature),
+        winddirection: windDirText(cw.winddirection),
+        windpower: beaufort(cw.windspeed),
       };
     } else {
       // 获取 Adcode
